@@ -20,6 +20,7 @@ uv run tree-browser
 - Enter a full URL, a domain such as `example.com`, or a search phrase in the address bar, then press Enter.
 - **New tab** (`Ctrl+T`) creates a top-level tab.
 - **New child** (`Ctrl+Shift+T`) adds a child to the selected tab and expands its parent.
+- Right-click a link and choose **Open link in new tab**, Ctrl+click it, or middle-click it to create a child tab beneath the page containing that link.
 - Select a tab in the left-hand tree to display its page.
 - **Close** (`Ctrl+W`) closes the selected tab and all of its descendants.
 - Use the back, forward, and reload buttons for navigation.

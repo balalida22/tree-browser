@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
-from urllib.parse import quote_plus
+from typing import Callable
 
 from PySide6.QtCore import QUrl, Qt
 from PySide6.QtGui import QAction, QKeySequence
@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QTreeWidgetItem,
 )
 
-HOME_URL = "https://www.google.com"
+from .address import HOME_URL, normalise_address
 
 
 @dataclass
@@ -31,16 +31,20 @@ class Tab:
     view: QWebEngineView
 
 
-def normalise_address(address: str) -> QUrl:
-    """Turn user input into a navigable URL or a web search."""
-    address = address.strip()
-    if not address:
-        return QUrl(HOME_URL)
-    if " " in address or "." not in address.split("/")[0]:
-        return QUrl(f"https://www.google.com/search?q={quote_plus(address)}")
-    if "://" not in address:
-        address = f"https://{address}"
-    return QUrl.fromUserInput(address)
+class TabWebView(QWebEngineView):
+    """A page view that asks its owning tree node to create child tabs."""
+
+    def __init__(self, open_child: Callable[[], QWebEngineView]) -> None:
+        super().__init__()
+        self._open_child = open_child
+
+    def createWindow(self, _window_type: object) -> QWebEngineView:
+        """Keep browser-created pages under the tab that opened them.
+
+        Qt WebEngine calls this for link context-menu actions, Ctrl+click,
+        middle-click, target=_blank links, and JavaScript popup requests.
+        """
+        return self._open_child()
 
 
 class BrowserWindow(QMainWindow):
@@ -93,21 +97,27 @@ class BrowserWindow(QMainWindow):
         action.triggered.connect(callback)  # type: ignore[arg-type]
         return action
 
-    def _make_tab(self, parent: QTreeWidgetItem | None = None) -> QTreeWidgetItem:
+    def _make_tab(self, parent: QTreeWidgetItem | None = None, *, load_home: bool = True) -> QTreeWidgetItem:
         item = QTreeWidgetItem(["New tab"])
         if parent is None:
             self.tree.addTopLevelItem(item)
         else:
             parent.addChild(item)
             parent.setExpanded(True)
-        view = QWebEngineView()
+        view = TabWebView(lambda node=item: self._open_child_for(node))
         self._tabs[item] = Tab(view)
         self.pages.addWidget(view)
         view.titleChanged.connect(lambda title, node=item: self._set_title(node, title))
         view.urlChanged.connect(lambda url, node=item: self._set_url(node, url))
         self.tree.setCurrentItem(item)
-        view.setUrl(QUrl(HOME_URL))
+        if load_home:
+            view.setUrl(QUrl(HOME_URL))
         return item
+
+    def _open_child_for(self, parent: QTreeWidgetItem) -> QWebEngineView:
+        """Create an empty child view for Qt WebEngine to load into."""
+        item = self._make_tab(parent, load_home=False)
+        return self._tabs[item].view
 
     def new_tab(self) -> None:
         self._make_tab()
@@ -171,7 +181,7 @@ class BrowserWindow(QMainWindow):
     def navigate(self) -> None:
         view = self._current_view()
         if view is not None:
-            view.setUrl(normalise_address(self.address.text()))
+            view.setUrl(QUrl.fromUserInput(normalise_address(self.address.text())))
 
     def go_back(self) -> None:
         if view := self._current_view():
