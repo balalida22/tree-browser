@@ -1,0 +1,1 @@
+"""Tree Browser desktop application."""
